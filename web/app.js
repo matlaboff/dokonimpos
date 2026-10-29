@@ -2,7 +2,7 @@
 let auth = null;
 let db = null;
 let initializeApp, getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut;
-let getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc;
+let getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, getDocs, writeBatch;
 
 // Application State
 let state = {
@@ -28,6 +28,9 @@ let state = {
     expenses: [],
     debtPayments: [],
     suppliers: [],
+    stockIncome: [],
+    shifts: [],
+    shiftRequired: localStorage.getItem('pos_shift_required') === '1',
     categories: ['Telefon', 'Aksessuar'],
     cart: []
 };
@@ -80,13 +83,37 @@ function initDOMHandles() {
         settingPaperWidth: document.getElementById('setting-paper-width'),
         settingAutoPrint: document.getElementById('setting-auto-print'),
         settingSound: document.getElementById('setting-sound'),
+        settingShiftRequired: document.getElementById('setting-shift-required'),
         settingPrinter: document.getElementById('setting-printer'),
         printerSelectWrap: document.getElementById('printer-select-wrap'),
         testPrintBtn: document.getElementById('test-print-btn'),
         printReceiptBtn: document.getElementById('print-receipt-btn'),
+        adminLoginModal: document.getElementById('admin-login-modal'),
+        adminLoginInput: document.getElementById('admin-login-input'),
+        adminLoginBtn: document.getElementById('admin-login-btn'),
+        adminLoginCancelBtn: document.getElementById('admin-login-cancel-btn'),
+        adminLoginError: document.getElementById('admin-login-error'),
+        adminPasswordStatus: document.getElementById('admin-password-status'),
+        adminCurrentPasswordInput: document.getElementById('admin-current-password'),
+        adminNewPasswordInput: document.getElementById('admin-new-password'),
+        adminConfirmPasswordInput: document.getElementById('admin-confirm-password'),
+        adminSetPasswordBtn: document.getElementById('admin-set-password-btn'),
+        adminRemovePasswordBtn: document.getElementById('admin-remove-password-btn'),
+        adminLogoutBtn: document.getElementById('admin-logout-btn'),
+        resetDataBtn: document.getElementById('reset-data-btn'),
+        resetModal: document.getElementById('reset-modal'),
+        resetBackupCheck: document.getElementById('reset-backup-check'),
+        resetCloudCheck: document.getElementById('reset-cloud-check'),
+        resetCloudRow: document.getElementById('reset-cloud-row'),
+        resetCloudNote: document.getElementById('reset-cloud-note'),
+        resetCounts: document.getElementById('reset-counts'),
+        resetConfirmInput: document.getElementById('reset-confirm-input'),
+        resetConfirmBtn: document.getElementById('reset-confirm-btn'),
         salesSearchInput: document.getElementById('sales-search-input'),
         salesDateFilter: document.getElementById('sales-date-filter'),
         salesCountLabel: document.getElementById('sales-count-label'),
+        salesPaymentFilter: document.getElementById('sales-payment-filter'),
+        salesShowReturned: document.getElementById('sales-show-returned'),
         manageSuppliersBtn: document.getElementById('manage-suppliers-btn'),
         suppliersModal: document.getElementById('suppliers-modal'),
         suppliersListContainer: document.getElementById('suppliers-list-container'),
@@ -96,6 +123,8 @@ function initDOMHandles() {
         saveSupplierBtn: document.getElementById('save-supplier-btn'),
         cancelSupplierEditBtn: document.getElementById('cancel-supplier-edit-btn'),
         prodSupplierSelect: document.getElementById('prod-supplier-select'),
+        prodMinSell: document.getElementById('prod-min-sell'),
+        prodMinSell: document.getElementById('prod-min-sell'),
         printBarcodeModalBtn: document.getElementById('print-barcode-modal-btn'),
         labelModal: document.getElementById('label-modal'),
         labelPreview: document.getElementById('label-preview'),
@@ -245,6 +274,8 @@ async function initFirebaseSDK() {
         setDoc = fsMod.setDoc;
         onSnapshot = fsMod.onSnapshot;
         deleteDoc = fsMod.deleteDoc;
+        getDocs = fsMod.getDocs;
+        writeBatch = fsMod.writeBatch;
 
         const firebaseConfig = {
             apiKey: "AIzaSyDiAXFyy13bZYgfKloz_oxkDPvOt127IuY",
@@ -303,6 +334,7 @@ function updateUIHeader() {
     if (DOM.settingPaperWidth) DOM.settingPaperWidth.value = state.paperWidth;
     if (DOM.settingAutoPrint) DOM.settingAutoPrint.checked = state.autoPrint;
     if (DOM.settingSound) DOM.settingSound.checked = state.soundOn;
+    if (DOM.settingShiftRequired) DOM.settingShiftRequired.checked = state.shiftRequired;
     if (DOM.settingApkUrl) DOM.settingApkUrl.value = state.apkUrl;
     if (DOM.settingExeUrl) DOM.settingExeUrl.value = state.exeUrl;
     if (DOM.settingShopId) DOM.settingShopId.value = state.shopId;
@@ -325,6 +357,10 @@ function setupEventListeners() {
     setupScanner();
     setupProFeatures();
     setupListFilters();
+    setupResetFeature();
+    setupAdminAuth();
+    setupStockIncome();
+    setupShifts();
 
     // Barcode Scanner & Search Input
     if (DOM.posSearchInput) {
@@ -475,6 +511,10 @@ function setupEventListeners() {
             state.paperWidth = DOM.settingPaperWidth.value === '58' ? '58' : '80';
             state.autoPrint = DOM.settingAutoPrint.checked;
             state.soundOn = DOM.settingSound.checked;
+            if (DOM.settingShiftRequired) {
+                state.shiftRequired = DOM.settingShiftRequired.checked;
+                localStorage.setItem('pos_shift_required', state.shiftRequired ? '1' : '0');
+            }
             if (DOM.settingPrinter) {
                 state.printerName = DOM.settingPrinter.value;
                 localStorage.setItem('pos_printer_name', state.printerName);
@@ -506,8 +546,8 @@ function setupEventListeners() {
     if (DOM.loginBtn) {
         DOM.loginBtn.addEventListener('click', () => {
             if (state.currentUser && signOut && auth) {
-                signOut(auth);
-                showToast('Bulut tizimidan chiqildi', 'warning');
+                logoutFromCloud();
+                showToast('Bulut tizimidan chiqildi. Mahalliy ma\'lumotlar saqlanib qoldi.', 'warning');
             } else {
                 switchTab('settings-section');
             }
@@ -523,7 +563,9 @@ window.switchTab = function(targetId) {
         s.classList.toggle('active', s.id === targetId);
     });
     if (targetId === 'pos-section') focusScanInput();
-    if (targetId === 'settings-section') refreshStorageInfo();
+    if (targetId === 'settings-section') { refreshStorageInfo(); updateAdminUI(); }
+    if (targetId === 'products-section') renderStockIncomeTable();
+    if (targetId === 'shifts-section') renderShiftSection();
 };
 
 // FIREBASE REALTIME SYNC
@@ -558,7 +600,7 @@ function setupRealtimeListeners() {
     realtimeUnsubscribes = [];
     const firstSnapDone = {};
 
-    const collections = ['products', 'customers', 'sales', 'debt_payments', 'categories', 'expenses', 'suppliers'];
+    const collections = ['products', 'customers', 'sales', 'debt_payments', 'categories', 'expenses', 'suppliers', 'stock_income', 'shifts'];
     collections.forEach(colName => {
         const colRef = collection(db, 'shops', state.shopId, colName);
         const unsub = onSnapshot(colRef, (snapshot) => {
@@ -572,6 +614,8 @@ function setupRealtimeListeners() {
             if (colName === 'debt_payments') state.debtPayments = list;
             if (colName === 'expenses') state.expenses = list;
             if (colName === 'suppliers') state.suppliers = list;
+            if (colName === 'stock_income') state.stockIncome = list;
+            if (colName === 'shifts') state.shifts = list;
             if (colName === 'categories') {
                 state.categories = Array.from(new Set(['Telefon', 'Aksessuar', ...list.map(c => c.name || c.id)]));
             }
@@ -593,11 +637,84 @@ function loadLocalData() {
         state.expenses = JSON.parse(localStorage.getItem('pos_data_expenses')) || [];
         state.categories = JSON.parse(localStorage.getItem('pos_data_categories')) || ['Telefon', 'Aksessuar'];
         state.suppliers = JSON.parse(localStorage.getItem('pos_data_suppliers')) || [];
+        state.stockIncome = JSON.parse(localStorage.getItem('pos_data_stock_income')) || [];
+        state.shifts = JSON.parse(localStorage.getItem('pos_data_shifts')) || [];
     } catch (e) {}
 }
 
 // RENDER ALL UI
+
+function handleStockIncome(productId, qty, buyPrice, note) {
+    const prod = state.products.find(p => p.id === productId);
+    if (!prod) return;
+    const q = Math.max(0, parseInt(qty)||0);
+    if (q <= 0) { showToast('Miqdorni kiriting!','error'); return; }
+    const bp = parseFloat(buyPrice);
+    const now = getLocalDateTime();
+    const entry = {
+        id: 'INC-'+Math.random().toString(36).substring(2,10).toUpperCase(),
+        product_id: productId, product_name: prod.name,
+        qty: q, buy_price: isNaN(bp) ? (parseFloat(prod.buy)||0) : bp,
+        note: String(note||'').trim(), created: now
+    };
+    prod.qty = (parseInt(prod.qty)||0) + q;
+    if (!isNaN(bp) && bp > 0) prod.buy = bp;
+    prod.updated = now;
+    state.stockIncome.push(entry);
+    syncDoc('products', prod.id, prod);
+    persistDoc('stock_income', entry.id, entry);
+    if (db && setDoc && doc) setDoc(doc(db,'shops',state.shopId,'stock_income',entry.id),entry,{merge:true}).catch(()=>{});
+    renderProductsTable(); renderStockIncomeTable();
+    showToast(`${prod.name}: +${q} dona qabul qilindi`);
+}
+
+function renderStockIncomeTable() {
+    const el = document.getElementById('stock-income-table-body');
+    if (!el) return;
+    const list = state.stockIncome.slice().sort(cmpCreatedDesc).slice(0, 200);
+    if (!list.length) { el.innerHTML='<tr><td colspan="6" class="text-center">Kirimlar yo\'q</td></tr>'; return; }
+    el.innerHTML = list.map(e => `<tr>
+        <td>${escapeHtml(e.created||'')}</td>
+        <td><strong>${escapeHtml(e.product_name||'')}</strong></td>
+        <td class="text-success"><strong>+${e.qty} dona</strong></td>
+        <td>${formatMoney(e.buy_price)}</td>
+        <td>${formatMoney((e.buy_price||0)*e.qty)}</td>
+        <td>${escapeHtml(e.note||'')}</td>
+    </tr>`).join('');
+}
+
+window.openStockIncomeModal = function(productId) {
+    const prod = state.products.find(p => p.id === productId);
+    if (!prod) return;
+    document.getElementById('si-product-name').textContent = prod.name;
+    document.getElementById('si-product-id').value = productId;
+    document.getElementById('si-qty').value = '';
+    document.getElementById('si-buy-price').value = prod.buy || '';
+    document.getElementById('si-note').value = '';
+    document.getElementById('stock-income-modal').classList.add('active');
+    setTimeout(() => document.getElementById('si-qty')?.focus(), 50);
+};
+
+function setupStockIncome() {
+    const btn = document.getElementById('si-save-btn');
+    if (btn) btn.addEventListener('click', () => {
+        const pid  = document.getElementById('si-product-id').value;
+        const qty  = document.getElementById('si-qty').value;
+        const bp   = document.getElementById('si-buy-price').value;
+        const note = document.getElementById('si-note').value;
+        handleStockIncome(pid, qty, bp, note);
+        const hasErr = document.querySelector('.toast') && document.querySelector('.toast').style.background?.includes('red');
+        setTimeout(() => { const m=document.getElementById('stock-income-modal'); if(m&&m.classList.contains('active') && state.stockIncome.find(e=>e.product_id===pid)){m.classList.remove('active');} }, 100);
+    });
+    ['si-qty','si-buy-price','si-note'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('si-save-btn')?.click(); });
+    });
+}
+
 function renderAll() {
+    renderShiftChip();
+    if ($id('shifts-section') && $id('shifts-section').classList.contains('active')) renderShiftSection();
     updateSupplierDropdowns();
     updateCategoryDropdowns();
     renderStats();
@@ -633,6 +750,7 @@ function renderStats() {
     const debtors = getDebtorsList();
     const totalDebt = debtors.reduce((sum, d) => sum + d.debt, 0);
 
+    updateAdminUI(); // maxfiy kartalar ko'rsatish/yashirish
     if (DOM.statTodaySales) DOM.statTodaySales.textContent = formatMoney(todaySales);
     if (DOM.statTodayProfit) DOM.statTodayProfit.textContent = `Sof foyda: ${formatMoney(todayProfit)}`;
     if (DOM.statCash) DOM.statCash.textContent = formatMoney(netCash);
@@ -816,7 +934,9 @@ function getCartSubtotal() {
 
 function updateCartSummary(resetPaid = false) {
     const subtotal = getCartSubtotal();
-    const discount = parseFloat(DOM.cartDiscountInput ? DOM.cartDiscountInput.value : 0) || 0;
+    let discount = parseFloat(DOM.cartDiscountInput ? DOM.cartDiscountInput.value : 0) || 0;
+    if (discount < 0) { discount = 0; if (DOM.cartDiscountInput) DOM.cartDiscountInput.value = 0; }
+    if (discount > subtotal) { discount = subtotal; if (DOM.cartDiscountInput) DOM.cartDiscountInput.value = subtotal; }
     const total = Math.max(0, subtotal - discount);
     const usdTotal = state.usdRate > 0 ? total / state.usdRate : 0;
 
@@ -861,12 +981,26 @@ function handleCheckout() {
         return;
     }
 
+    const activeShift = getOpenShift();
+    if (state.shiftRequired && !activeShift) {
+        showToast('Sotuv uchun avval smenani oching!', 'error');
+        openShiftOpenModal();
+        return;
+    }
+
     const customerId = DOM.cartCustomerSelect ? DOM.cartCustomerSelect.value : '';
     const paymentMethod = DOM.cartPaymentSelect ? DOM.cartPaymentSelect.value : 'Naqd';
-    const discount = parseFloat(DOM.cartDiscountInput ? DOM.cartDiscountInput.value : 0) || 0;
+    let discount = parseFloat(DOM.cartDiscountInput ? DOM.cartDiscountInput.value : 0) || 0;
     const subtotal = getCartSubtotal();
+    if (discount < 0) discount = 0;
+    if (discount > subtotal) discount = subtotal;
     const total = Math.max(0, subtotal - discount);
     const paid = getPaidAmount(total);
+
+    const zeroItem = state.cart.find(i => !(parseFloat(i.product.sell)>0) && !String(i.product.id).startsWith('QUICK-'));
+    if (zeroItem) { showToast(`"${zeroItem.product.name}" narxi 0 — avval narxni belgilang!`,'error'); return; }
+    const lowItem = state.cart.find(i => { const mp=parseFloat(i.product.minSellPrice)||0; return mp>0 && (parseFloat(i.product.sell)||0)<mp; });
+    if (lowItem) { showToast(`"${lowItem.product.name}" minimal narxi ${formatMoney(lowItem.product.minSellPrice)} so'm!`,'error'); return; }
 
     if ((paymentMethod === 'Qarz' || paid < total) && !customerId) {
         showToast('To\'liq to\'lanmagan yoki nasiya savdo uchun mijozni tanlang!', 'error');
@@ -900,6 +1034,8 @@ function handleCheckout() {
         customer_id: customerId,
         customer_name: customerName,
         payment: paid < total && paymentMethod !== 'Qarz' ? 'Aralash/Qarz' : paymentMethod,
+        method: paymentMethod,
+        shift_id: activeShift ? activeShift.id : '',
         discount: discount,
         paid: Math.min(total, Math.max(0, paid)),
         received: paid,
@@ -988,6 +1124,7 @@ function renderProductsTable() {
                 <td><strong class="text-primary">${formatMoney(p.sell)}</strong></td>
                 <td><strong class="${isLow ? 'text-danger' : ''}">${p.qty} dona</strong></td>
                 <td>
+                    <button class="btn btn-xs btn-outline green-btn" title="Omborga kirim" onclick="openStockIncomeModal('${p.id}')"><i class="fa-solid fa-arrow-down"></i></button>
                     <button class="btn btn-xs btn-outline blue-btn" title="Barcode yorlig'i" onclick="openProductLabel('${p.id}')"><i class="fa-solid fa-barcode"></i></button>
                     <button class="btn btn-xs btn-secondary" onclick="openProductModal('${p.id}')"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn btn-xs btn-danger" onclick="deleteProduct('${p.id}')"><i class="fa-solid fa-trash"></i></button>
@@ -1010,6 +1147,7 @@ window.openProductModal = function(prodId = null) {
             DOM.prodImei.value = p.imei || '';
             DOM.prodCatSelect.value = p.cat || '';
             if (DOM.prodSupplierSelect) DOM.prodSupplierSelect.value = p.supplier_name || '';
+            if (DOM.prodMinSell) DOM.prodMinSell.value = p.minSellPrice || '';
             DOM.prodBuy.value = p.buy || 0;
             DOM.prodSell.value = p.sell || 0;
             DOM.prodQty.value = p.qty || 0;
@@ -1022,6 +1160,7 @@ window.openProductModal = function(prodId = null) {
         DOM.prodImei.value = '';
         DOM.prodCatSelect.value = '';
         if (DOM.prodSupplierSelect) DOM.prodSupplierSelect.value = '';
+        if (DOM.prodMinSell) DOM.prodMinSell.value = '';
         DOM.prodBuy.value = '';
         DOM.prodSell.value = '';
         DOM.prodQty.value = 1;
@@ -1053,6 +1192,7 @@ function handleSaveProduct() {
         return;
     }
     const minVal = parseInt(DOM.prodMin.value);
+    const minSellVal = parseFloat(DOM.prodMinSell ? DOM.prodMinSell.value : 0) || 0;
 
     const productObj = {
         id: id,
@@ -1065,6 +1205,9 @@ function handleSaveProduct() {
         sell: sell,
         qty: parseInt(DOM.prodQty.value) || 0,
         min: isNaN(minVal) ? 2 : minVal,
+        minSellPrice: minSellVal,
+        minSellPrice: minSellVal,
+        minSellPrice: minSellVal,
         updated: now
     };
 
@@ -1145,14 +1288,17 @@ window.returnSale = function(saleId) {
     const sale = state.sales.find(s => s.id === saleId);
     if (!sale || sale.returned === 1) return;
 
+    const retNow = getLocalDateTime();
     sale.returned = 1;
-    sale.updated = getLocalDateTime();
-
-    if (Array.isArray(sale.items)) {
+    sale.returned_at = retNow;
+    sale.updated = retNow;
+    if (Array.isArray(sale.items) && sale.items.length > 0) {
         sale.items.forEach(item => {
+            if (!item.product_id) return;
             const prod = state.products.find(p => p.id === item.product_id);
-            if (prod) {
-                prod.qty = (parseInt(prod.qty) || 0) + (parseInt(item.qty) || 0);
+            if (prod && !String(prod.id).startsWith('QUICK-')) {
+                prod.qty = (parseInt(prod.qty)||0) + Math.max(0, parseInt(item.qty)||0);
+                prod.updated = retNow;
                 syncDoc('products', prod.id, prod);
             }
         });
@@ -1410,9 +1556,18 @@ function focusScanInput() {
 }
 
 // Skanerdan (yoki qo'lda) kelgan kodni qayta ishlash
+let _lastScanCode = '';
+let _lastScanTime = 0;
+const SCAN_DEBOUNCE_MS = 120;
+
 function handleScan(raw, opts = {}) {
     const code = String(raw == null ? '' : raw).replace(/[\u0000-\u001f\u007f]/g, '').trim();
     if (!code) return false;
+    if (!opts.fromCamera && !opts.fromInput) {
+        const _n = Date.now();
+        if (code === _lastScanCode && _n - _lastScanTime < SCAN_DEBOUNCE_MS) return false;
+        _lastScanCode = code; _lastScanTime = _n;
+    }
 
     const addAndReport = (product) => {
         const added = addToCart(product.id);
@@ -1550,6 +1705,7 @@ const RECEIPT_CSS = `
 .rc .stamp { text-align: center; border: 2px solid #000; padding: 3px; margin: 6px 0; font-weight: 800; letter-spacing: 2px; }
 .rc .thanks { text-align: center; font-weight: 800; margin-top: 8px; font-size: calc(var(--fs, 12.5px) * 1.1); word-break: break-word; }
 .rc .small { text-align: center; font-size: calc(var(--fs, 12.5px) * .85); margin-top: 3px; }
+.rc .sig { margin-top: 16px; border-top: 1px solid #000; padding-top: 2px; text-align: center; font-size: calc(var(--fs, 12.5px) * .85); }
 `;
 
 function injectReceiptStyle() {
@@ -1663,11 +1819,18 @@ async function loadPrinterList() {
 }
 
 // Har qanday hujjatni (chek, yorliq) faqat o'zini chop etadi — butun sahifani emas
-function printDocument(bodyHtml, title) {
+// isLabel: true bo'lsa 30×40mm qog'oz o'lchami ishlatiladi, false bo'lsa chek (80mm yoki 58mm rulon)
+function printDocument(bodyHtml, title, isLabel) {
+    const receiptWidthMm = state.paperWidth === '58' ? 58 : 80;
+    // @page: chek uchun rulon (balandlik auto), barcode uchun qattiq 30×40mm
+    const pageRule = isLabel
+        ? '@page { margin: 0; size: 40mm 30mm; }'
+        : `@page { margin: 0; size: ${receiptWidthMm}mm auto; }`;
+
     const html = `<!DOCTYPE html><html lang="uz"><head><meta charset="UTF-8">
 <title>${escapeHtml(title || 'Chop etish')}</title>
 <style>
-@page { margin: 0; }
+${pageRule}
 html, body { margin: 0; padding: 0; background: #fff; }
 ${RECEIPT_CSS}
 ${LABEL_CSS}
@@ -1675,38 +1838,41 @@ ${LABEL_CSS}
 
     // Desktop (.exe): oynasiz, to'g'ridan-to'g'ri tanlangan printerga
     if (window.electronAPI && window.electronAPI.printHtml) {
+        const widthMm  = isLabel ? 30 : receiptWidthMm;
+        const heightMm = isLabel ? 40 : undefined;
         window.electronAPI.printHtml({
             html,
             printerName: state.printerName,
-            widthMm: state.paperWidth === '58' ? 58 : 80
+            widthMm,
+            heightMm,
+            isLabel
         }).then(r => {
             if (!r || !r.success) showToast('Chop etilmadi: ' + ((r && r.reason) || 'printerni tekshiring'), 'error');
         }).catch(() => showToast('Printerga ulanib bo\'lmadi', 'error'));
         return;
     }
 
+    // Brauzer: yashirin iframe — onload'da print() (font/SVG yuklanib bo'lganida)
     const old = document.getElementById('print-frame');
     if (old) old.remove();
     const frame = document.createElement('iframe');
     frame.id = 'print-frame';
     frame.setAttribute('aria-hidden', 'true');
-    frame.style.cssText = 'position:fixed; right:0; bottom:0; width:0; height:0; border:0; visibility:hidden;';
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none;';
     document.body.appendChild(frame);
 
-    const w = frame.contentWindow;
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-
-    setTimeout(() => {
+    frame.onload = () => {
         try {
-            w.focus();
-            w.print();
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
         } catch (e) {
             showToast('Chop etishda xatolik yuz berdi', 'error');
         }
-        setTimeout(() => frame.remove(), 60000);
-    }, 300);
+        setTimeout(() => { if (frame.parentNode) frame.remove(); }, 90000);
+    };
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    frame.src = URL.createObjectURL(blob);
 }
 
 function printReceipt(sale) {
@@ -1715,7 +1881,7 @@ function printReceipt(sale) {
         showToast('Chop etish uchun chek yo\'q', 'warning');
         return;
     }
-    printDocument(receiptWrapperHTML(sale), 'Chek ' + (sale.id || ''));
+    printDocument(receiptWrapperHTML(sale), 'Chek ' + (sale.id || ''), false);
 }
 
 function printTestReceipt() {
@@ -1778,6 +1944,8 @@ window.backupDatabase = function() {
         debtPayments: state.debtPayments,
         categories: state.categories,
         suppliers: state.suppliers,
+        stockIncome: state.stockIncome,
+        shifts: state.shifts,
         exportedAt: getLocalDateTime()
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -1802,6 +1970,8 @@ window.restoreDatabase = function(event) {
             if (data.debtPayments) state.debtPayments = data.debtPayments;
             if (data.categories) state.categories = data.categories;
             if (data.suppliers) state.suppliers = data.suppliers;
+            if (data.stockIncome) state.stockIncome = data.stockIncome;
+            if (data.shifts) state.shifts = data.shifts;
             if (data.shopName) { state.shopName = data.shopName; localStorage.setItem('pos_shop_name', state.shopName); }
             saveLocalData();
             syncAllToCloud();
@@ -1825,6 +1995,8 @@ function syncAllToCloud() {
     state.expenses.forEach(x => x && x.id && put('expenses', x.id, x));
     state.debtPayments.forEach(x => x && x.id && put('debt_payments', x.id, x));
     state.suppliers.forEach(x => x && x.id && put('suppliers', x.id, x));
+    state.stockIncome.forEach(x => x && x.id && put('stock_income', x.id, x));
+    state.shifts.forEach(x => x && x.id && put('shifts', x.id, x));
     state.categories.forEach(c => put('categories', c, { name: c }));
 }
 
@@ -2115,8 +2287,6 @@ function code128SVG(text, heightMm, maxDots) {
     if (!pat) return '';
     const quiet = 10;
     const modules = pat.split('').reduce((s, d) => s + parseInt(d), 0) + quiet * 2;
-    const dotsPerModule = Math.max(1, Math.min(3, Math.floor(maxDots / modules)));
-    const widthMm = (modules * dotsPerModule) / 8;
     let x = quiet;
     let bars = '';
     for (let i = 0; i < pat.length; i++) {
@@ -2124,7 +2294,8 @@ function code128SVG(text, heightMm, maxDots) {
         if (i % 2 === 0) bars += `<rect x="${x}" y="0" width="${w}" height="1"/>`;
         x += w;
     }
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${modules} 1" preserveAspectRatio="none" shape-rendering="crispEdges" fill="#000" style="display:block;margin:0 auto;width:${widthMm}mm;height:${heightMm}mm">${bars}</svg>`;
+    // width/height CSS orqali beriladi (.lb-svg svg qoidasidan) — rasm o'lchami chiqmasiga yo'l qo'ymaydi
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${modules} 1" preserveAspectRatio="none" shape-rendering="crispEdges" fill="#000">${bars}</svg>`;
 }
 
 // ====================================================================
@@ -2132,28 +2303,44 @@ function code128SVG(text, heightMm, maxDots) {
 // ====================================================================
 const LABEL_CSS = `
 .lb, .lb * { box-sizing: border-box; font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; color: #000; margin: 0; padding: 0; }
-.lb { width: var(--w, 72mm); margin: 0 auto; padding: 2mm 1.5mm; text-align: center; background: #fff; }
-.lb + .lb { border-top: 1px dashed #000; margin-top: 1mm; padding-top: 3mm; }
-.lb:last-child { padding-bottom: 8mm; }
-.lb .lb-shop { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
-.lb .lb-name { font-size: 14px; font-weight: 800; line-height: 1.2; margin: 2px 0 4px; word-break: break-word; }
-.lb .lb-code { font-size: 12px; font-weight: 700; letter-spacing: 2px; margin-top: 2px; word-break: break-all; }
-.lb .lb-price { font-size: 20px; font-weight: 800; margin-top: 3px; }
-.lb .lb-warn { font-size: 11px; font-weight: 700; margin: 4px 0; }
+.lb {
+    width: 38mm;               /* 40mm - 1mm har tomondan bosilmaydigan chegara */
+    height: 28mm;
+    padding: 0.5mm 1mm;
+    text-align: center;
+    background: #fff;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    page-break-after: always;
+}
+.lb:last-child { page-break-after: avoid; }
+.lb .lb-shop { font-size: 6px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; line-height: 1.1; flex-shrink: 0; }
+.lb .lb-name { font-size: 7.5px; font-weight: 800; line-height: 1.15; word-break: break-word; flex-shrink: 0; max-height: 10mm; overflow: hidden; }
+.lb .lb-svg  { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 0; }
+.lb .lb-svg svg { max-width: 36mm; max-height: 10mm; width: 36mm; height: 10mm; }
+.lb .lb-code  { font-size: 6px; font-weight: 700; letter-spacing: 1px; word-break: break-all; flex-shrink: 0; }
+.lb .lb-price { font-size: 9px; font-weight: 800; flex-shrink: 0; }
+.lb .lb-warn  { font-size: 6px; font-weight: 700; flex-shrink: 0; }
 `;
 
 let labelData = null;
 
 function buildLabelHTML(d) {
-    const cfg = paperConfig();
-    const maxDots = state.paperWidth === '58' ? 368 : 560;
-    const showShop = !DOM.labelShowShop || DOM.labelShowShop.checked;
+    // 30×40 mm yorliq: Code128 barcode 26×13mm SVG (viewBox="0 0 W 1", CSS bilan o'lcham beriladi)
+    const showShop  = !DOM.labelShowShop  || DOM.labelShowShop.checked;
     const showPrice = (!DOM.labelShowPrice || DOM.labelShowPrice.checked) && d.price > 0;
-    const svg = code128SVG(d.code, 14, maxDots);
-    return `<div class="lb" style="--w:${cfg.w};">
-        ${showShop ? `<div class="lb-shop">${escapeHtml(state.shopName)}</div>` : ''}
+    // 28mm × 8px/mm ≈ 224 dot; barcode eni 28mm ga moslashtiriladi
+    const svg = code128SVG(d.code, 10, 304);
+    const svgBlock = svg
+        ? `<div class="lb-svg">${svg}</div>`
+        : `<div class="lb-warn">Kodda lotin bo'lmagan belgi — barcode bo'lmadi</div>`;
+    return `<div class="lb">
+        ${showShop  ? `<div class="lb-shop">${escapeHtml(state.shopName)}</div>` : ''}
         <div class="lb-name">${escapeHtml(d.name)}</div>
-        ${svg || '<div class="lb-warn">Kodda lotin bo\'lmagan belgi bor — shtrix-kod chizib bo\'lmadi</div>'}
+        ${svgBlock}
         <div class="lb-code">${escapeHtml(d.code)}</div>
         ${showPrice ? `<div class="lb-price">${fmtNum(d.price)} so'm</div>` : ''}
     </div>`;
@@ -2203,7 +2390,7 @@ function printLabels() {
     if (!labelData) return;
     const copies = Math.min(200, Math.max(1, parseInt(DOM.labelCopies.value) || 1));
     const one = buildLabelHTML(labelData);
-    printDocument(Array(copies).fill(one).join(''), 'Barcode ' + labelData.code);
+    printDocument(Array(copies).fill(one).join(''), 'Barcode ' + labelData.code, true);
 }
 
 // ====================================================================
@@ -2284,8 +2471,8 @@ function firebaseErrorMessage(err) {
 // SAQLASH: IndexedDB (katta hajm) + localStorage'dan avtomatik ko'chirish
 // ====================================================================
 const DB_NAME = 'dokonim_pos';
-const DB_VERSION = 1;
-const DB_COLLECTIONS = ['products', 'customers', 'sales', 'debt_payments', 'expenses', 'categories', 'suppliers'];
+const DB_VERSION = 2;
+const DB_COLLECTIONS = ['products', 'customers', 'sales', 'debt_payments', 'expenses', 'categories', 'suppliers', 'stock_income', 'shifts'];
 let idb = null;
 let storageMode = 'indexeddb'; // IndexedDB ochilmasa: 'localstorage' (zaxira rejim)
 let storageWarned = false;
@@ -2367,6 +2554,8 @@ function stateList(col) {
         case 'expenses': return state.expenses;
         case 'categories': return state.categories;
         case 'suppliers': return state.suppliers;
+        case 'stock_income': return state.stockIncome;
+        case 'shifts': return state.shifts;
         default: return [];
     }
 }
@@ -2443,6 +2632,8 @@ function legacySaveSoon() {
             localStorage.setItem('pos_data_expenses', JSON.stringify(state.expenses));
             localStorage.setItem('pos_data_categories', JSON.stringify(state.categories));
             localStorage.setItem('pos_data_suppliers', JSON.stringify(state.suppliers));
+            localStorage.setItem('pos_data_stock_income', JSON.stringify(state.stockIncome));
+            localStorage.setItem('pos_data_shifts', JSON.stringify(state.shifts));
         } catch (e) { reportStorageError(e); }
     }, 300);
 }
@@ -2480,7 +2671,7 @@ async function initStorage() {
     try {
         idb = await idbOpen();
         await migrateFromLocalStorage();
-        const [products, customers, sales, debtPayments, expenses, categories, suppliers] =
+        const [products, customers, sales, debtPayments, expenses, categories, suppliers, stockIncome, shifts] =
             await Promise.all(DB_COLLECTIONS.map(idbGetAll));
         state.products = products;
         state.customers = customers;
@@ -2488,6 +2679,8 @@ async function initStorage() {
         state.debtPayments = debtPayments;
         state.expenses = expenses;
         state.suppliers = suppliers;
+        state.stockIncome = stockIncome;
+        state.shifts = shifts;
         state.categories = categories.length ? categories.map(c => c.name || c.id) : ['Telefon', 'Aksessuar'];
         storageMode = 'indexeddb';
         // Brauzerdan ma'lumotni o'zboshimchalik bilan o'chirmaslikni so'raymiz
@@ -2593,10 +2786,14 @@ function renderSalesAndExpenses() {
     if (DOM.salesTableBody) {
         const q = DOM.salesSearchInput ? DOM.salesSearchInput.value.toLowerCase().trim() : '';
         const day = DOM.salesDateFilter ? DOM.salesDateFilter.value : '';
+        const payF = DOM.salesPaymentFilter ? DOM.salesPaymentFilter.value : '';
+        const showRet = DOM.salesShowReturned ? DOM.salesShowReturned.checked : true;
         let list = state.sales;
-        if (q || day) {
+        if (q || day || payF || !showRet) {
             list = list.filter(s => {
+                if (!showRet && s.returned === 1) return false;
                 if (day && !(s.created || '').startsWith(day)) return false;
+                if (payF && (s.payment || '') !== payF) return false;
                 if (!q) return true;
                 return (s.name || '').toLowerCase().includes(q) ||
                     (s.customer_name || '').toLowerCase().includes(q) ||
@@ -2668,5 +2865,659 @@ function setupListFilters() {
         t = setTimeout(() => { salesLimit = LIST_PAGE; renderSalesAndExpenses(); }, 150);
     };
     if (DOM.salesSearchInput) DOM.salesSearchInput.addEventListener('input', onChange);
-    if (DOM.salesDateFilter) DOM.salesDateFilter.addEventListener('change', onChange);
+    if (DOM.salesDateFilter)    DOM.salesDateFilter.addEventListener('change', onChange);
+    if (DOM.salesPaymentFilter) DOM.salesPaymentFilter.addEventListener('change', onChange);
+    if (DOM.salesShowReturned)  DOM.salesShowReturned.addEventListener('change', onChange);
+}
+
+// ====================================================================
+// 0 DAN BOSHLASH (barcha ma'lumotlarni tozalash) va xavfsiz chiqish
+// ====================================================================
+const RESET_WORD = 'TOZALASH';
+const CLOUD_COLLECTIONS = ['products', 'customers', 'sales', 'debt_payments', 'categories', 'expenses', 'suppliers', 'stock_income', 'shifts'];
+
+function stopRealtimeListeners() {
+    realtimeUnsubscribes.forEach(unsub => { try { unsub(); } catch (e) {} });
+    realtimeUnsubscribes = [];
+}
+
+// "Chiqish": bulutdan uzadi, parolni unutadi (aks holda dastur qayta ochilganda o'zi ulanib, ma'lumotni qaytaradi)
+function logoutFromCloud() {
+    stopRealtimeListeners();
+    if (state.currentUser && signOut && auth) signOut(auth);
+    state.pass = '';
+    localStorage.removeItem('pos_pass');
+    if (DOM.settingPass) DOM.settingPass.value = '';
+}
+
+async function deleteCloudData() {
+    for (const col of CLOUD_COLLECTIONS) {
+        const snap = await getDocs(collection(db, 'shops', state.shopId, col));
+        let batch = writeBatch(db);
+        let n = 0;
+        for (const d of snap.docs) {
+            batch.delete(d.ref);
+            n++;
+            if (n === 400) { await batch.commit(); batch = writeBatch(db); n = 0; }
+        }
+        if (n > 0) await batch.commit();
+    }
+}
+
+function openResetModal() {
+    const loggedIn = !!(state.currentUser && state.shopId && db && getDocs && writeBatch);
+    DOM.resetConfirmInput.value = '';
+    DOM.resetConfirmBtn.disabled = true;
+    DOM.resetBackupCheck.checked = true;
+    DOM.resetCloudCheck.checked = false;
+    DOM.resetCloudRow.style.display = loggedIn ? 'block' : 'none';
+    DOM.resetCloudNote.style.display = loggedIn ? 'block' : 'none';
+    DOM.resetCounts.textContent =
+        `Hozir: ${state.products.length} ta mahsulot, ${state.sales.length} ta sotuv, ${state.customers.length} ta mijoz.`;
+    DOM.resetModal.classList.add('active');
+    setTimeout(() => DOM.resetConfirmInput.focus(), 50);
+}
+
+async function resetAllData() {
+    if (DOM.resetConfirmInput.value.trim().toUpperCase() !== RESET_WORD) return;
+    const wantCloud = DOM.resetCloudCheck.checked && !!state.currentUser;
+    const wasLoggedIn = !!state.currentUser;
+    DOM.resetConfirmBtn.disabled = true;
+    DOM.resetConfirmBtn.textContent = 'Tozalanmoqda...';
+    try {
+        if (DOM.resetBackupCheck.checked) backupDatabase();
+
+        stopRealtimeListeners();
+        if (wantCloud) await deleteCloudData();
+
+        state.products = [];
+        state.customers = [];
+        state.sales = [];
+        state.debtPayments = [];
+        state.expenses = [];
+        state.suppliers = [];
+        state.stockIncome = [];
+        state.shifts = [];
+        state.categories = ['Telefon', 'Aksessuar'];
+        state.cart = [];
+        salesLimit = LIST_PAGE;
+        expensesLimit = LIST_PAGE;
+        persistAll();
+        await writeChain;
+
+        if (wasLoggedIn && !wantCloud) {
+            // Bulutda ma'lumot qolgan: ulanib tursa, hammasi qaytib keladi
+            logoutFromCloud();
+        } else if (wasLoggedIn) {
+            setupRealtimeListeners();
+        }
+
+        if (DOM.salesSearchInput)   DOM.salesSearchInput.value = '';
+        if (DOM.salesDateFilter)    DOM.salesDateFilter.value = '';
+        if (DOM.salesPaymentFilter) DOM.salesPaymentFilter.value = '';
+        if (DOM.salesShowReturned)  DOM.salesShowReturned.checked = true;
+        if (DOM.posSearchInput) DOM.posSearchInput.value = '';
+        DOM.resetModal.classList.remove('active');
+        renderAll();
+        refreshStorageInfo();
+        showToast(wantCloud ? 'Mahalliy va bulutdagi ma\'lumotlar tozalandi. 0 dan boshlashingiz mumkin!' : 'Ma\'lumotlar tozalandi. 0 dan boshlashingiz mumkin!');
+    } catch (e) {
+        console.error(e);
+        showToast('Tozalashda xatolik: ' + (e && e.message ? e.message : e), 'error');
+        if (wasLoggedIn && wantCloud) setupRealtimeListeners();
+    } finally {
+        DOM.resetConfirmBtn.textContent = 'Hammasini o\'chirish';
+        DOM.resetConfirmBtn.disabled = DOM.resetConfirmInput.value.trim().toUpperCase() !== RESET_WORD;
+    }
+}
+
+function setupResetFeature() {
+    if (DOM.resetDataBtn) DOM.resetDataBtn.addEventListener('click', openResetModal);
+    if (DOM.resetConfirmInput) {
+        DOM.resetConfirmInput.addEventListener('input', () => {
+            DOM.resetConfirmBtn.disabled = DOM.resetConfirmInput.value.trim().toUpperCase() !== RESET_WORD;
+        });
+        DOM.resetConfirmInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !DOM.resetConfirmBtn.disabled) resetAllData(); });
+    }
+    if (DOM.resetConfirmBtn) DOM.resetConfirmBtn.addEventListener('click', resetAllData);
+}
+// ====================================================================
+// ADMIN PAROL TIZIMI
+// ====================================================================
+// Parol SHA-256 hash sifatida saqlanadi (to'g'ridan-to'g'ri parol saqlanmaydi).
+// Sessiya 8 soat amal qiladi — sahifa yopilsa ham token saqlanib qoladi.
+
+const ADMIN_SESSION_KEY  = 'pos_admin_session';
+const ADMIN_HASH_KEY     = 'pos_admin_hash';
+const ADMIN_SESSION_TTL  = 8 * 60 * 60 * 1000; // 8 soat (ms)
+const ADMIN_SALT         = 'dokonim_pos_v1_';   // brute-force dan himoya
+
+async function sha256hex(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function getAdminHash()    { return localStorage.getItem(ADMIN_HASH_KEY) || ''; }
+function isAdminEnabled()  { return !!getAdminHash(); }
+
+function isAdminLoggedIn() {
+    try {
+        const raw = localStorage.getItem(ADMIN_SESSION_KEY);
+        if (!raw) return false;
+        const { token, exp } = JSON.parse(raw);
+        if (Date.now() > exp) { localStorage.removeItem(ADMIN_SESSION_KEY); return false; }
+        return token === 'ok';
+    } catch (e) { return false; }
+}
+
+function setAdminSession() {
+    localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ token: 'ok', exp: Date.now() + ADMIN_SESSION_TTL }));
+}
+
+function clearAdminSession() {
+    localStorage.removeItem(ADMIN_SESSION_KEY);
+}
+
+// Admin paroli o'rnatilgan bo'lsa va sessiya yo'q bo'lsa — kirish talab etiladi
+function requireAdmin(onSuccess) {
+    if (!isAdminEnabled()) { onSuccess(); return; }
+    if (isAdminLoggedIn()) { onSuccess(); return; }
+    openAdminLoginModal(onSuccess);
+}
+
+function openAdminLoginModal(onSuccess) {
+    if (DOM.adminLoginInput)  DOM.adminLoginInput.value = '';
+    if (DOM.adminLoginError)  DOM.adminLoginError.style.display = 'none';
+    if (DOM.adminLoginModal)  DOM.adminLoginModal.classList.add('active');
+    DOM._adminLoginCallback = onSuccess;
+    setTimeout(() => { if (DOM.adminLoginInput) DOM.adminLoginInput.focus(); }, 60);
+}
+
+async function handleAdminLogin() {
+    const val = DOM.adminLoginInput ? DOM.adminLoginInput.value : '';
+    if (!val) return;
+    const hash = await sha256hex(ADMIN_SALT + val);
+    if (hash !== getAdminHash()) {
+        if (DOM.adminLoginError) { DOM.adminLoginError.style.display = 'block'; }
+        if (DOM.adminLoginInput) { DOM.adminLoginInput.value = ''; DOM.adminLoginInput.focus(); }
+        return;
+    }
+    setAdminSession();
+    if (DOM.adminLoginModal) DOM.adminLoginModal.classList.remove('active');
+    if (typeof DOM._adminLoginCallback === 'function') {
+        DOM._adminLoginCallback();
+        DOM._adminLoginCallback = null;
+    }
+}
+
+function setupAdminAuth() {
+    // Login modal tugmalari
+    if (DOM.adminLoginBtn)    DOM.adminLoginBtn.addEventListener('click', handleAdminLogin);
+    if (DOM.adminLoginInput)  DOM.adminLoginInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleAdminLogin(); });
+    if (DOM.adminLoginCancelBtn) DOM.adminLoginCancelBtn.addEventListener('click', () => {
+        if (DOM.adminLoginModal) DOM.adminLoginModal.classList.remove('active');
+        DOM._adminLoginCallback = null;
+    });
+
+    // Parol o'rnatish / o'zgartirish
+    if (DOM.adminSetPasswordBtn) DOM.adminSetPasswordBtn.addEventListener('click', setAdminPassword);
+    if (DOM.adminRemovePasswordBtn) DOM.adminRemovePasswordBtn.addEventListener('click', removeAdminPassword);
+    if (DOM.adminLogoutBtn) DOM.adminLogoutBtn.addEventListener('click', () => {
+        clearAdminSession();
+        updateAdminUI();
+        showToast('Admin sessiyadan chiqildi', 'warning');
+    });
+
+    // Nav tugmalar: sozlamalar va bosh sahifa
+    const settingsNavBtn = document.querySelector('[data-target="settings-section"]');
+    if (settingsNavBtn) {
+        settingsNavBtn.addEventListener('click', e => {
+            e.stopImmediatePropagation();
+            requireAdmin(() => switchTab('settings-section'));
+        }, true);
+    }
+
+    updateAdminUI();
+}
+
+function updateAdminUI() {
+    const enabled = isAdminEnabled();
+    const loggedIn = isAdminLoggedIn();
+    if (DOM.adminPasswordStatus) {
+        DOM.adminPasswordStatus.textContent = enabled
+            ? (loggedIn ? 'Admin paroli o\'rnatilgan — siz kirdinigiz (sessiya 8 soat)' : 'Admin paroli o\'rnatilgan')
+            : 'Admin paroli o\'rnatilmagan — hamma sozlamalarni ko\'ra oladi';
+        DOM.adminPasswordStatus.className = 'hint-text ' + (enabled ? 'text-success' : 'text-danger');
+    }
+    if (DOM.adminRemovePasswordBtn) DOM.adminRemovePasswordBtn.style.display = enabled ? 'inline-flex' : 'none';
+    if (DOM.adminLogoutBtn) DOM.adminLogoutBtn.style.display = (enabled && loggedIn) ? 'inline-flex' : 'none';
+
+    // Bosh sahifadagi maxfiy kartalar
+    const protectedCards = document.querySelectorAll('.admin-protected');
+    protectedCards.forEach(el => {
+        el.style.display = (!enabled || loggedIn) ? '' : 'none';
+    });
+}
+
+async function setAdminPassword() {
+    const newPass = DOM.adminNewPasswordInput ? DOM.adminNewPasswordInput.value.trim() : '';
+    const confirmPass = DOM.adminConfirmPasswordInput ? DOM.adminConfirmPasswordInput.value.trim() : '';
+    if (!newPass) { showToast('Yangi parolni kiriting!', 'error'); return; }
+    if (newPass.length < 4) { showToast('Parol kamida 4 ta belgi bo\'lishi kerak!', 'error'); return; }
+    if (newPass !== confirmPass) { showToast('Parollar mos kelmadi!', 'error'); return; }
+    if (isAdminEnabled()) {
+        const currentVal = DOM.adminCurrentPasswordInput ? DOM.adminCurrentPasswordInput.value : '';
+        if (!currentVal) { showToast('Avvalgi parolni ham kiriting!', 'error'); return; }
+        const currentHash = await sha256hex(ADMIN_SALT + currentVal);
+        if (currentHash !== getAdminHash()) { showToast('Avvalgi parol noto\'g\'ri!', 'error'); return; }
+    }
+    const hash = await sha256hex(ADMIN_SALT + newPass);
+    localStorage.setItem(ADMIN_HASH_KEY, hash);
+    setAdminSession();
+    if (DOM.adminNewPasswordInput)     DOM.adminNewPasswordInput.value = '';
+    if (DOM.adminConfirmPasswordInput) DOM.adminConfirmPasswordInput.value = '';
+    if (DOM.adminCurrentPasswordInput) DOM.adminCurrentPasswordInput.value = '';
+    updateAdminUI();
+    showToast('Admin paroli o\'rnatildi! Sessiya 8 soat davom etadi.');
+}
+
+async function removeAdminPassword() {
+    if (!isAdminEnabled()) return;
+    const val = prompt('Admin parolini o\'chirish uchun hozirgi parolni kiriting:');
+    if (!val) return;
+    const hash = await sha256hex(ADMIN_SALT + val);
+    if (hash !== getAdminHash()) { showToast('Parol noto\'g\'ri!', 'error'); return; }
+    localStorage.removeItem(ADMIN_HASH_KEY);
+    clearAdminSession();
+    updateAdminUI();
+    showToast('Admin paroli o\'chirildi. Endi hamma sozlamalarni ko\'ra oladi.', 'warning');
+}
+
+// ====================================================================
+// SMENA (kassa smenasi): ochish, yopish, Z-hisobot
+// ====================================================================
+const $id = (id) => document.getElementById(id);
+const numv = (v) => parseFloat(v) || 0;
+let currentShiftReportId = null;
+
+function getOpenShift() {
+    const open = state.shifts.filter(s => s && s.status === 'open');
+    if (!open.length) return null;
+    return open.sort((a, b) => ((b.opened || '') > (a.opened || '') ? 1 : -1))[0];
+}
+
+// Admin paroli yoqilgan bo'lsa, summalarni faqat admin ko'radi
+function canSeeMoney() { return !isAdminEnabled() || isAdminLoggedIn(); }
+
+function shiftNumber(shift) {
+    const sorted = state.shifts.slice().sort((a, b) => ((a.opened || '') > (b.opened || '') ? 1 : -1));
+    return sorted.findIndex(s => s.id === shift.id) + 1;
+}
+
+function parseLocalDT(str) {
+    const d = new Date(String(str || '').replace(' ', 'T'));
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function fmtDuration(fromStr, toStr) {
+    const a = parseLocalDT(fromStr);
+    const b = toStr ? parseLocalDT(toStr) : new Date();
+    if (!a || !b) return '';
+    const mins = Math.max(0, Math.round((b - a) / 60000));
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return h > 0 ? `${h} soat ${m} daqiqa` : `${m} daqiqa`;
+}
+
+// To'lov turini aniqlash: yangi sotuvlarda `method` bor, eskilarida faqat `payment` yorlig'i
+function saleMethodKey(s) {
+    const m = String(s.method || s.payment || 'Naqd');
+    if (m === 'Karta') return 'card';
+    if (m.startsWith('Dollar')) return 'usd';
+    if (m === 'Aralash' || m === 'Aralash/Qarz') return 'mixed';
+    return 'cash'; // Naqd va Qarz (qisman to'langan qismi naqd deb hisoblanadi)
+}
+
+function salePaidAmount(s) {
+    const total = numv(s.total);
+    if (s.paid !== undefined && s.paid !== null && s.paid !== '') return Math.min(total, Math.max(0, numv(s.paid)));
+    return s.payment === 'Qarz' ? 0 : total;
+}
+
+// Smena vaqt oralig'idagi hamma harakat: sotuv, qaytarish, xarajat, qarz to'lovi
+function computeShiftSummary(shift) {
+    const from = shift.opened || '';
+    const to = shift.closed || '9999-12-31 23:59:59';
+    const inRange = (t) => !!t && t >= from && t <= to;
+    const r = {
+        salesCount: 0, grossTotal: 0, discountTotal: 0,
+        cash: 0, card: 0, usd: 0, mixed: 0, creditGiven: 0,
+        returnsCount: 0, returnsTotal: 0, cashRefunds: 0,
+        expensesCount: 0, expensesTotal: 0,
+        debtPayCount: 0, debtPayTotal: 0
+    };
+    for (const s of state.sales) {
+        if (inRange(s.created)) {
+            const total = numv(s.total), paid = salePaidAmount(s);
+            r.salesCount++;
+            r.grossTotal += total;
+            r.discountTotal += numv(s.discount);
+            r[saleMethodKey(s)] += paid;
+            r.creditGiven += Math.max(0, total - paid);
+        }
+        if (s.returned === 1 && inRange(s.returned_at || s.updated)) {
+            r.returnsCount++;
+            r.returnsTotal += numv(s.total);
+            if (saleMethodKey(s) !== 'card') r.cashRefunds += salePaidAmount(s); // karta qaytimi kassadan chiqmaydi
+        }
+    }
+    for (const e of state.expenses) {
+        if (inRange(e.created)) { r.expensesCount++; r.expensesTotal += numv(e.amount); }
+    }
+    for (const d of state.debtPayments) {
+        if (inRange(d.created)) { r.debtPayCount++; r.debtPayTotal += numv(d.amount); }
+    }
+    r.cashIn = r.cash + r.usd + r.mixed;
+    r.expectedCash = numv(shift.opening_cash) + r.cashIn + r.debtPayTotal - r.expensesTotal - r.cashRefunds;
+    return r;
+}
+
+function openShiftNow(cashier, openingCash) {
+    if (getOpenShift()) { showToast('Smena allaqachon ochiq!', 'warning'); return null; }
+    const now = getLocalDateTime();
+    const shift = {
+        id: 'SHIFT-' + Math.random().toString(36).substring(2, 10).toUpperCase(),
+        status: 'open',
+        cashier: String(cashier || '').trim(),
+        opened: now, closed: '',
+        opening_cash: Math.max(0, numv(openingCash)),
+        counted_cash: null, expected_cash: null, difference: null,
+        summary: null, note: '', updated: now
+    };
+    state.shifts.push(shift);
+    syncDoc('shifts', shift.id, shift);
+    return shift;
+}
+
+function closeShiftNow(countedCash, note) {
+    const shift = getOpenShift();
+    if (!shift) return null;
+    const now = getLocalDateTime();
+    shift.closed = now;
+    const sum = computeShiftSummary(shift);
+    shift.status = 'closed';
+    shift.summary = sum;
+    shift.expected_cash = sum.expectedCash;
+    shift.counted_cash = Math.max(0, numv(countedCash));
+    shift.difference = shift.counted_cash - sum.expectedCash;
+    shift.note = String(note || '').trim();
+    shift.updated = now;
+    syncDoc('shifts', shift.id, shift);
+    return shift;
+}
+
+// ---------- Z / X hisobot (chek ko'rinishida) ----------
+function diffText(d) {
+    const v = Math.round(d);
+    if (v === 0) return '0 (teng)';
+    return v > 0 ? `+${fmtNum(v)} (ortiqcha)` : `-${fmtNum(-v)} (kam)`;
+}
+
+function buildShiftReportHTML(shift) {
+    const closed = shift.status === 'closed';
+    const sum = closed && shift.summary ? shift.summary : computeShiftSummary(shift);
+    const row = (label, val) => `<div class="row"><span>${label}</span><b>${val}</b></div>`;
+    const money = (v) => `${fmtNum(v)} so'm`;
+    const footerLines = [];
+    return `
+        <div class="c">
+            <div class="shop">${escapeHtml(state.shopName)}</div>
+            ${state.shopPhone ? `<div class="sub">Tel: ${escapeHtml(state.shopPhone)}</div>` : ''}
+        </div>
+        <div class="hr dbl"></div>
+        <div class="title">SMENA HISOBOTI</div>
+        <div class="c sub">${closed ? '(Z — smena yopildi)' : '(X — oraliq, smena ochiq)'}</div>
+        <div class="hr"></div>
+        <div class="meta">
+            <div class="row"><span>Smena №:</span><span>${shiftNumber(shift)}</span></div>
+            <div class="row"><span>Kassir:</span><span>${escapeHtml(shift.cashier || '—')}</span></div>
+            <div class="row"><span>Ochildi:</span><span>${escapeHtml(fmtReceiptDate(shift.opened))}</span></div>
+            <div class="row"><span>${closed ? 'Yopildi:' : 'Hozir:'}</span><span>${escapeHtml(fmtReceiptDate(closed ? shift.closed : getLocalDateTime()))}</span></div>
+            <div class="row"><span>Davomiyligi:</span><span>${escapeHtml(fmtDuration(shift.opened, closed ? shift.closed : ''))}</span></div>
+        </div>
+        <div class="hr solid"></div>
+        <div class="sum">
+            ${row('Sotuvlar soni:', sum.salesCount + ' ta')}
+            ${row('Sotuv summasi:', money(sum.grossTotal))}
+            ${sum.discountTotal > 0 ? row('Shundan chegirma:', money(sum.discountTotal)) : ''}
+        </div>
+        <div class="hr"></div>
+        <div class="title" style="letter-spacing:1px;">TO'LOV TURLARI</div>
+        <div class="sum">
+            ${row('Naqd:', money(sum.cash))}
+            ${row('Karta:', money(sum.card))}
+            ${sum.usd > 0 ? row('Dollar (so\'m ekv.):', money(sum.usd)) : ''}
+            ${sum.mixed > 0 ? row('Aralash (naqdga qo\'shildi):', money(sum.mixed)) : ''}
+            ${row('Nasiyaga berildi:', money(sum.creditGiven))}
+        </div>
+        <div class="hr"></div>
+        <div class="sum">
+            ${row('Qaytarishlar (' + sum.returnsCount + ' ta):', '-' + money(sum.returnsTotal))}
+            ${row('Xarajatlar (' + sum.expensesCount + ' ta):', '-' + money(sum.expensesTotal))}
+            ${row('Qarz to\'lovlari (' + sum.debtPayCount + ' ta):', '+' + money(sum.debtPayTotal))}
+        </div>
+        <div class="hr solid"></div>
+        <div class="title" style="letter-spacing:1px;">NAQD PUL (KASSA)</div>
+        <div class="sum">
+            ${row('Boshlang\'ich naqd:', money(shift.opening_cash))}
+            ${row('Kassada bo\'lishi kerak:', money(sum.expectedCash))}
+            ${closed ? row('Sanab chiqilgan:', money(shift.counted_cash)) : ''}
+        </div>
+        ${closed ? `<div class="total"><span>FARQ:</span><span>${diffText(shift.difference)}</span></div>` : ''}
+        ${shift.note ? `<div class="small" style="text-align:left;margin-top:6px;">Izoh: ${escapeHtml(shift.note)}</div>` : ''}
+        <div class="hr dbl"></div>
+        <div class="sig">Kassir imzosi</div>
+        <div class="sig">Qabul qildi (egasi / admin)</div>
+    `;
+}
+
+function shiftReportWrapper(shift) {
+    const cfg = paperConfig();
+    return `<div class="rc" style="--w:${cfg.w}; --fs:${cfg.fs};">${buildShiftReportHTML(shift)}</div>`;
+}
+
+function showShiftReport(shiftId) {
+    const shift = state.shifts.find(s => s.id === shiftId);
+    if (!shift) return;
+    currentShiftReportId = shiftId;
+    $id('shift-report-paper').innerHTML = shiftReportWrapper(shift);
+    $id('shift-report-modal').classList.add('active');
+}
+
+function printShiftReport(shiftId) {
+    const shift = state.shifts.find(s => s.id === (shiftId || currentShiftReportId));
+    if (!shift) return;
+    printDocument(shiftReportWrapper(shift), 'Smena ' + shiftNumber(shift), false);
+}
+
+window.viewShiftReport = function(id) { showShiftReport(id); };
+
+// ---------- Ekranni chizish ----------
+function renderShiftChip() {
+    const chip = $id('shift-chip');
+    if (!chip) return;
+    const open = getOpenShift();
+    chip.classList.toggle('open', !!open);
+    chip.classList.toggle('closed', !open);
+    $id('shift-chip-text').textContent = open
+        ? `Smena ochiq${open.cashier ? ': ' + open.cashier : ''}`
+        : 'Smena yopiq';
+}
+
+function renderShiftSection() {
+    const card = $id('shift-status-card');
+    if (!card) return;
+    const open = getOpenShift();
+    if (!open) {
+        card.innerHTML = `
+            <div class="shift-state closed"><i class="fa-solid fa-lock"></i> Smena yopiq</div>
+            <p class="hint-text">${state.shiftRequired
+                ? 'Sotuv qilish uchun avval smenani oching.'
+                : 'Smena ochish ixtiyoriy: ochsangiz, kun oxirida kassa hisobotini olasiz.'}</p>
+            <button class="btn btn-primary btn-lg" onclick="openShiftOpenModal()"><i class="fa-solid fa-lock-open"></i> Smenani ochish</button>`;
+    } else {
+        const long = (Date.now() - (parseLocalDT(open.opened) || new Date()).getTime()) > 24 * 3600 * 1000;
+        card.innerHTML = `
+            <div class="shift-state open"><i class="fa-solid fa-lock-open"></i> Smena №${shiftNumber(open)} ochiq</div>
+            <div class="shift-meta">
+                <div><span>Kassir</span><b>${escapeHtml(open.cashier || '—')}</b></div>
+                <div><span>Ochilgan</span><b>${escapeHtml(fmtReceiptDate(open.opened))}</b></div>
+                <div><span>Davomiyligi</span><b>${escapeHtml(fmtDuration(open.opened, ''))}</b></div>
+                <div><span>Boshlang'ich naqd</span><b>${fmtNum(open.opening_cash)} so'm</b></div>
+            </div>
+            ${long ? '<p class="hint-text text-danger"><i class="fa-solid fa-triangle-exclamation"></i> Smena 24 soatdan ortiq ochiq. Kunlik hisobot uchun uni yopib, yangisini oching.</p>' : ''}
+            <div class="shift-actions">
+                <button class="btn btn-danger btn-lg" onclick="openShiftCloseModal()"><i class="fa-solid fa-lock"></i> Smenani yopish</button>
+            </div>`;
+    }
+
+    // Jonli ko'rsatkichlar (admin-protected)
+    const live = $id('shift-live-body');
+    if (live) {
+        if (!open) {
+            live.innerHTML = '<p class="hint-text">Smena ochilganda bu yerda ko\'rsatkichlar paydo bo\'ladi.</p>';
+        } else {
+            const s = computeShiftSummary(open);
+            const cell = (label, val, cls) => `<div class="shift-cell"><span>${label}</span><b class="${cls || ''}">${val}</b></div>`;
+            live.innerHTML = `
+                <div class="shift-grid">
+                    ${cell('Sotuvlar', s.salesCount + ' ta')}
+                    ${cell('Sotuv summasi', fmtNum(s.grossTotal) + ' so\'m')}
+                    ${cell('Naqd', fmtNum(s.cash + s.usd + s.mixed) + ' so\'m')}
+                    ${cell('Karta', fmtNum(s.card) + ' so\'m')}
+                    ${cell('Nasiyaga', fmtNum(s.creditGiven) + ' so\'m')}
+                    ${cell('Qaytarishlar', '-' + fmtNum(s.returnsTotal) + ' so\'m', 'text-danger')}
+                    ${cell('Xarajatlar', '-' + fmtNum(s.expensesTotal) + ' so\'m', 'text-danger')}
+                    ${cell('Qarz to\'lovlari', '+' + fmtNum(s.debtPayTotal) + ' so\'m', 'text-success')}
+                    ${cell('Kassada bo\'lishi kerak', fmtNum(s.expectedCash) + ' so\'m', 'shift-expected')}
+                </div>
+                <button class="btn btn-secondary" onclick="showShiftReport('${open.id}')"><i class="fa-solid fa-file-lines"></i> Oraliq hisobot (X)</button>`;
+        }
+    }
+
+    // Tarix (admin-protected)
+    const body = $id('shift-history-body');
+    if (body) {
+        const closed = state.shifts.filter(s => s.status === 'closed')
+            .sort((a, b) => ((b.opened || '') > (a.opened || '') ? 1 : -1)).slice(0, 100);
+        if (!closed.length) {
+            body.innerHTML = '<tr><td colspan="9" class="text-center">Yopilgan smenalar yo\'q</td></tr>';
+        } else {
+            body.innerHTML = closed.map(s => {
+                const sum = s.summary || {};
+                const d = numv(s.difference);
+                const cls = Math.round(d) === 0 ? 'text-success' : (d < 0 ? 'text-danger' : 'shift-over');
+                return `<tr>
+                    <td><strong>№${shiftNumber(s)}</strong></td>
+                    <td>${escapeHtml(s.cashier || '—')}</td>
+                    <td>${escapeHtml(fmtReceiptDate(s.opened))}</td>
+                    <td>${escapeHtml(fmtReceiptDate(s.closed))}</td>
+                    <td>${fmtNum(sum.grossTotal)}</td>
+                    <td>${fmtNum(s.expected_cash)}</td>
+                    <td>${fmtNum(s.counted_cash)}</td>
+                    <td class="${cls}"><strong>${diffText(d)}</strong></td>
+                    <td><button class="btn btn-xs btn-secondary" title="Hisobot" onclick="viewShiftReport('${s.id}')"><i class="fa-solid fa-print"></i></button></td>
+                </tr>`;
+            }).join('');
+        }
+    }
+    updateAdminUI();
+}
+
+// ---------- Oynalar ----------
+window.openShiftOpenModal = function() {
+    if (getOpenShift()) { showToast('Smena allaqachon ochiq!', 'warning'); return; }
+    // Oldingi smena yopilgan naqd pulni taklif qilamiz
+    const prev = state.shifts.filter(s => s.status === 'closed')
+        .sort((a, b) => ((b.closed || '') > (a.closed || '') ? 1 : -1))[0];
+    $id('shift-open-cashier').value = (prev && prev.cashier) || '';
+    $id('shift-open-cash').value = prev ? Math.round(numv(prev.counted_cash)) : '';
+    $id('shift-open-hint').textContent = prev ? 'Oldingi smena yopilganda sanalgan naqd pul qo\'yildi.' : '';
+    $id('shift-open-modal').classList.add('active');
+    setTimeout(() => $id('shift-open-cashier').focus(), 50);
+};
+
+function updateShiftCloseDiff() {
+    const open = getOpenShift();
+    const box = $id('shift-diff-box');
+    if (!open || !box || !canSeeMoney()) return;
+    const raw = $id('shift-close-counted').value;
+    if (raw === '') { box.textContent = 'Sanab chiqilgan summani kiriting'; box.className = 'shift-diff'; return; }
+    const exp = computeShiftSummary(open).expectedCash;
+    const d = numv(raw) - exp;
+    box.textContent = 'Farq: ' + diffText(d);
+    box.className = 'shift-diff ' + (Math.round(d) === 0 ? 'ok' : (d < 0 ? 'bad' : 'over'));
+}
+
+window.openShiftCloseModal = function() {
+    const open = getOpenShift();
+    if (!open) { showToast('Ochiq smena yo\'q', 'warning'); return; }
+    const see = canSeeMoney();
+    const sum = computeShiftSummary(open);
+    $id('shift-close-summary').style.display = see ? 'block' : 'none';
+    $id('shift-diff-box').style.display = see ? 'block' : 'none';
+    $id('shift-close-blind').style.display = see ? 'none' : 'block';
+    if (see) {
+        const line = (l, v) => `<div class="storage-row"><span>${l}</span><b>${v}</b></div>`;
+        $id('shift-close-summary').innerHTML =
+            line('Sotuvlar', `${sum.salesCount} ta — ${fmtNum(sum.grossTotal)} so'm`) +
+            line('Boshlang\'ich naqd', fmtNum(open.opening_cash) + ' so\'m') +
+            line('Naqd tushum', fmtNum(sum.cashIn) + ' so\'m') +
+            line('Qarz to\'lovlari', '+' + fmtNum(sum.debtPayTotal) + ' so\'m') +
+            line('Xarajatlar', '-' + fmtNum(sum.expensesTotal) + ' so\'m') +
+            line('Naqd qaytarishlar', '-' + fmtNum(sum.cashRefunds) + ' so\'m') +
+            line('<strong>Kassada bo\'lishi kerak</strong>', `<strong>${fmtNum(sum.expectedCash)} so'm</strong>`);
+    }
+    $id('shift-close-counted').value = '';
+    $id('shift-close-note').value = '';
+    $id('shift-close-print').checked = true;
+    updateShiftCloseDiff();
+    $id('shift-close-modal').classList.add('active');
+    setTimeout(() => $id('shift-close-counted').focus(), 50);
+};
+
+function setupShifts() {
+    $id('shift-chip')?.addEventListener('click', () => switchTab('shifts-section'));
+
+    $id('shift-open-confirm')?.addEventListener('click', () => {
+        const cash = $id('shift-open-cash').value;
+        if (cash === '' || numv(cash) < 0) { showToast('Boshlang\'ich naqd summani kiriting (0 ham bo\'ladi)', 'error'); return; }
+        const shift = openShiftNow($id('shift-open-cashier').value, cash);
+        if (!shift) return;
+        $id('shift-open-modal').classList.remove('active');
+        renderShiftChip();
+        renderShiftSection();
+        showToast(`Smena №${shiftNumber(shift)} ochildi`);
+        focusScanInput();
+    });
+    $id('shift-open-cash')?.addEventListener('keydown', e => { if (e.key === 'Enter') $id('shift-open-confirm').click(); });
+
+    $id('shift-close-counted')?.addEventListener('input', updateShiftCloseDiff);
+    $id('shift-close-counted')?.addEventListener('keydown', e => { if (e.key === 'Enter') $id('shift-close-confirm').click(); });
+    $id('shift-close-confirm')?.addEventListener('click', () => {
+        const counted = $id('shift-close-counted').value;
+        if (counted === '' || numv(counted) < 0) { showToast('Kassadagi naqd pulni sanab, summani kiriting', 'error'); return; }
+        const wantPrint = $id('shift-close-print').checked;
+        const see = canSeeMoney();
+        const shift = closeShiftNow(counted, $id('shift-close-note').value);
+        if (!shift) return;
+        $id('shift-close-modal').classList.remove('active');
+        renderShiftChip();
+        renderShiftSection();
+        showToast(`Smena №${shiftNumber(shift)} yopildi`);
+        if (see) showShiftReport(shift.id);          // admin: ekranda ko'radi
+        else if (wantPrint) printShiftReport(shift.id); // kassir: hisobot egasi uchun chop etiladi
+    });
+
+    $id('shift-report-print-btn')?.addEventListener('click', () => printShiftReport());
+    document.querySelectorAll('.shift-modal-close').forEach(b => b.addEventListener('click', () => b.closest('.modal').classList.remove('active')));
 }
