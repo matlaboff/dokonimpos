@@ -908,3 +908,63 @@ kbd {
     border-bottom: 1px dashed var(--gray-200);
 }
 .storage-row span { color: var(--gray-600); }
+
+/* XAVFLI ZONA */
+.danger-zone { border: 1px solid var(--danger); }
+.danger-zone .card-header h3 { color: var(--danger); }
+#reset-confirm-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ADMIN PROTECTED KARTALAR */
+.admin-protected { transition: opacity 0.2s; }
+
+/* Admin login modal yuqorida turadi */
+#admin-login-modal { z-index: 1200; }
+#admin-login-modal .modal-content { max-width: 360px; }
+
+/* Admin parol kartasi */
+#admin-current-password-row { display: flex; flex-direction: column; gap: 10px; }
+
+/* ================================================================ */
+/* SMENA                                                            */
+/* ================================================================ */
+.shift-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px; border-radius: 20px; border: 1px solid var(--gray-200);
+    background: #fff; font-size: 12.5px; font-weight: 700; cursor: pointer;
+}
+.shift-chip.open   { color: var(--success); border-color: var(--success); background: var(--success-light); }
+.shift-chip.closed { color: var(--gray-600); }
+.shift-chip:hover  { filter: brightness(.97); }
+
+.shift-card { padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+.shift-state { font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+.shift-state.open   { color: var(--success); }
+.shift-state.closed { color: var(--gray-600); }
+.shift-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.shift-meta > div, .shift-cell {
+    background: var(--gray-100); border-radius: 10px; padding: 9px 12px;
+    display: flex; flex-direction: column; gap: 3px;
+}
+.shift-meta span, .shift-cell span { font-size: 11.5px; color: var(--gray-600); }
+.shift-meta b, .shift-cell b { font-size: 14px; }
+.shift-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.shift-expected { color: var(--primary); font-size: 16px !important; }
+.shift-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn-lg { padding: 12px 22px; font-size: 15px; }
+.shift-over { color: #d97706; }
+
+.shift-diff {
+    padding: 10px 12px; border-radius: 8px; font-weight: 800; text-align: center;
+    background: var(--gray-100); color: var(--gray-600);
+}
+.shift-diff.ok   { background: var(--success-light); color: var(--success); }
+.shift-diff.bad  { background: var(--danger-light);  color: var(--danger); }
+.shift-diff.over { background: #fef3c7; color: #b45309; }
+
+@media (max-width: 900px) {
+    .shift-meta { grid-template-columns: repeat(2, 1fr); }
+    .shift-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Smena kartasidagi tugmalar cho'zilmasin */
+.shift-card > .btn { align-self: flex-start; }
