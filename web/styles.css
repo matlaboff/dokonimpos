@@ -1295,3 +1295,124 @@ button { -webkit-tap-highlight-color: transparent; }
     .stat-card { gap: 12px; }
     .stat-info h3 { font-size: 19px; }
 }
+
+
+/* ============================================================
+   PRO FINISH — refined glass navigation and dashboard polish
+   ============================================================ */
+.navbar {
+    margin: 14px auto 0;
+    width: min( calc(100% - 36px), 1540px );
+    padding: 13px 20px;
+    gap: 16px;
+    border-radius: 24px;
+    background: rgba(248,246,244,.48);
+    border: 1px solid rgba(255,255,255,.72);
+    -webkit-backdrop-filter: blur(26px) saturate(145%);
+    backdrop-filter: blur(26px) saturate(145%);
+    box-shadow: 0 14px 38px rgba(55,45,38,.12),
+                inset 0 1px 0 rgba(255,255,255,.88);
+}
+.brand { flex: 0 0 auto; }
+.logo-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    box-shadow: 0 7px 20px rgba(15,105,220,.27),
+                inset 0 1px 0 rgba(255,255,255,.55);
+}
+#shop-name-display { letter-spacing: -.035em; }
+.nav-links {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 3px;
+}
+.nav-btn {
+    white-space: nowrap;
+    padding: 11px 10px;
+    border: 1px solid transparent;
+    border-radius: 14px;
+}
+.nav-btn.active {
+    border-color: rgba(255,255,255,.76);
+    background: linear-gradient(145deg,rgba(255,255,255,.88),rgba(225,239,255,.68));
+    box-shadow: 0 6px 18px rgba(40,100,180,.12),
+                inset 0 1px 0 #fff;
+}
+.status-box {
+    flex: 0 0 auto;
+    gap: 9px;
+}
+.status-indicator {
+    white-space: nowrap;
+    padding: 10px 13px;
+    border: 1px solid rgba(255,255,255,.62);
+}
+#login-btn {
+    border-radius: 14px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,.42);
+    border: 1px solid rgba(255,255,255,.72);
+}
+.main-content {
+    padding-top: 30px;
+}
+.section-header h2 i {
+    color: #273247;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,.10));
+}
+.header-actions .btn-success {
+    border-radius: 14px;
+}
+.card, .stat-card {
+    transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+}
+.card:hover {
+    border-color: rgba(255,255,255,.92);
+    box-shadow: 0 15px 34px rgba(52,43,36,.12),
+                inset 0 1px 0 rgba(255,255,255,.85);
+}
+.stat-card {
+    position: relative;
+    isolation: isolate;
+}
+.stat-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: linear-gradient(135deg,rgba(255,255,255,.20),transparent 62%);
+    pointer-events: none;
+}
+.empty-msg { text-align: center; }
+input, select, textarea {
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+}
+button:focus-visible, a:focus-visible, input:focus-visible,
+select:focus-visible, textarea:focus-visible {
+    outline: 3px solid rgba(22,119,238,.38);
+    outline-offset: 2px;
+}
+@media (max-width: 1180px) {
+    .navbar { width: calc(100% - 28px); }
+    .nav-links { order: 3; flex-basis: 100%; }
+    .status-box { margin-left: auto; }
+}
+@media (max-width: 767px) {
+    .navbar {
+        width: calc(100% - 16px);
+        margin-top: 8px;
+        padding: 12px;
+        gap: 10px;
+    }
+    .status-box {
+        margin-left: auto;
+        gap: 7px;
+    }
+    .status-indicator { padding: 8px 10px; }
+    #login-btn { padding: 8px 11px; }
+    .nav-links { order: 3; }
+    .main-content { padding-top: 20px; }
+}
