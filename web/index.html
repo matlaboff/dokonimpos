@@ -27,18 +27,12 @@
                 <button class="nav-btn" data-target="pos-section"><i class="fa-solid fa-cart-shopping"></i> <span>Kassa (POS)</span></button>
                 <button class="nav-btn" data-target="products-section"><i class="fa-solid fa-boxes-stacked"></i> <span>Ombor</span></button>
                 <button class="nav-btn" data-target="sales-section"><i class="fa-solid fa-clock-rotate-left"></i> <span>Savdo & Xarajat</span></button>
-                <button class="nav-btn" data-target="shifts-section"><i class="fa-solid fa-cash-register"></i> <span>Smena</span></button>
                 <button class="nav-btn" data-target="customers-section"><i class="fa-solid fa-users"></i> <span>Mijozlar</span></button>
                 <button class="nav-btn mobile-only-nav" data-target="reports-section" id="reports-nav-item"><i class="fa-solid fa-file-invoice-dollar"></i> <span>Hisobotlar</span></button>
                 <button class="nav-btn" data-target="settings-section"><i class="fa-solid fa-gear"></i> <span>Sozlamalar</span></button>
             </nav>
 
             <div class="status-box">
-                <div class="download-links">
-                    <button id="nav-download-apk" class="btn btn-xs btn-outline green-btn" title="Android APK yuklab olish"><i class="fa-brands fa-android"></i> <span class="dl-text">Android .APK</span></button>
-                    <button id="nav-download-exe" class="btn btn-xs btn-outline blue-btn" title="Windows EXE yuklab olish"><i class="fa-brands fa-windows"></i> <span class="dl-text">Windows .EXE</span></button>
-                </div>
-                <button id="shift-chip" class="shift-chip closed" title="Kassa smenasi"><i class="fa-solid fa-clock"></i> <span id="shift-chip-text">Smena yopiq</span></button>
                 <span id="sync-status" class="status-indicator offline"><i class="fa-solid fa-circle"></i> Oflayn</span>
                 <button id="login-btn" class="btn btn-sm btn-outline"><i class="fa-solid fa-right-to-bracket"></i> Login</button>
             </div>
@@ -259,26 +253,6 @@
                         </table>
                     </div>
                 </div>
-
-            <!-- Omborga kirim tarixi -->
-            <div class="card" style="margin-top:20px; max-width:1200px; margin-left:auto; margin-right:auto;">
-                <div class="card-header">
-                    <h3><i class="fa-solid fa-arrow-down"></i> Omborga kirim tarixi</h3>
-                </div>
-                <div class="table-responsive">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Sana</th><th>Mahsulot</th><th>Miqdor</th>
-                                <th>Tan narxi</th><th>Jami summa</th><th>Izoh</th>
-                            </tr>
-                        </thead>
-                        <tbody id="stock-income-table-body">
-                            <tr><td colspan="6" class="text-center">Kirimlar yo'q</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
             </section>
 
             <!-- SECTION 4: SALES HISTORY & EXPENSES -->
@@ -304,17 +278,6 @@
                             <input type="text" id="sales-search-input" placeholder="Qidirish: mahsulot, mijoz, chek raqami..." autocomplete="off">
                         </div>
                         <input type="date" id="sales-date-filter" class="select-filter" title="Sana bo'yicha">
-                        <select id="sales-payment-filter" class="select-filter">
-                            <option value="">Barcha to'lovlar</option>
-                            <option value="Naqd">Naqd</option>
-                            <option value="Karta">Karta</option>
-                            <option value="Dollar">Dollar</option>
-                            <option value="Qarz">Qarz</option>
-                            <option value="Aralash/Qarz">Aralash/Qarz</option>
-                        </select>
-                        <label class="check-row" style="white-space:nowrap;font-size:13px;">
-                            <input type="checkbox" id="sales-show-returned" checked> Qaytarilganlar
-                        </label>
                         <span id="sales-count-label" class="hint-text"></span>
                     </div>
                     <div class="table-responsive">
@@ -359,36 +322,6 @@
             </section>
 
             <!-- SECTION 5: CUSTOMERS & DEBTORS -->
-            <section id="shifts-section" class="app-section">
-                <div class="section-header">
-                    <h2><i class="fa-solid fa-cash-register"></i> Kassa smenasi</h2>
-                </div>
-
-                <div id="shift-status-card" class="card shift-card"></div>
-
-                <div class="card admin-protected" style="margin-top:16px;">
-                    <div class="card-header"><h3><i class="fa-solid fa-chart-simple"></i> Joriy smena ko'rsatkichlari</h3></div>
-                    <div class="card-body" id="shift-live-body"></div>
-                </div>
-
-                <div class="card admin-protected" style="margin-top:16px;">
-                    <div class="card-header"><h3><i class="fa-solid fa-clock-rotate-left"></i> Smenalar tarixi</h3></div>
-                    <div class="table-responsive">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Smena</th><th>Kassir</th><th>Ochilgan</th><th>Yopilgan</th>
-                                    <th>Sotuv</th><th>Kutilgan naqd</th><th>Sanalgan</th><th>Farq</th><th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="shift-history-body">
-                                <tr><td colspan="9" class="text-center">Yopilgan smenalar yo'q</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
             <section id="customers-section" class="app-section">
                 <div class="section-header">
                     <h2><i class="fa-solid fa-users"></i> Mijozlar va Qarzlar</h2>
@@ -489,15 +422,6 @@
                             <input type="password" id="setting-pass" placeholder="••••••••">
 
                             <button class="btn btn-success" id="connect-firebase-btn"><i class="fa-solid fa-sync"></i> Bulutga ulanish</button>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header"><h3><i class="fa-solid fa-cash-register"></i> Smena</h3></div>
-                        <div class="card-body form-group">
-                            <label class="check-row"><input type="checkbox" id="setting-shift-required"> Sotuv uchun smena ochiq bo'lishi shart</label>
-                            <p class="hint-text">Yoqilsa, smena ochilmaguncha sotuv qilib bo'lmaydi. Admin paroli o'rnatilgan bo'lsa, kassir smenani "ko'r" yopadi: summalarni faqat admin ko'radi.</p>
-                            <p class="hint-text">Saqlash uchun yuqoridagi "Sozlamalarni saqlash" tugmasini bosing.</p>
                         </div>
                     </div>
 
@@ -660,15 +584,6 @@
                         <input type="number" id="prod-min" placeholder="2">
                     </div>
                 </div>
-                <div class="form-row">
-                    <div>
-                        <label>Minimal sotuv narxi (so'm):</label>
-                        <input type="number" id="prod-min-sell" placeholder="0 — cheklov yo'q" min="0">
-                    </div>
-                    <div style="padding-top:22px;">
-                        <small style="color:var(--gray-600);">Bu narxdan past sotuv bloklanadi. 0 yoki bo'sh = cheklov yo'q.</small>
-                    </div>
-                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary close-modal-btn">Bekor qilish</button>
@@ -775,92 +690,6 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary close-modal-btn">Bekor qilish</button>
                 <button class="btn btn-danger" id="submit-expense-btn">Saqlash</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal 14: Smena ochish -->
-    <div id="shift-open-modal" class="modal">
-        <div class="modal-content modal-sm">
-            <div class="modal-header">
-                <h3><i class="fa-solid fa-lock-open"></i> Smenani ochish</h3>
-                <span class="close-modal">&times;</span>
-            </div>
-            <div class="modal-body form-group">
-                <label>Kassir ismi:</label>
-                <input type="text" id="shift-open-cashier" placeholder="Masalan: Ali" autocomplete="off">
-                <label>Kassadagi boshlang'ich naqd pul (so'm) *:</label>
-                <input type="number" id="shift-open-cash" placeholder="0" min="0">
-                <p class="hint-text" id="shift-open-hint"></p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary close-modal-btn">Bekor qilish</button>
-                <button class="btn btn-primary" id="shift-open-confirm"><i class="fa-solid fa-lock-open"></i> Smenani ochish</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal 15: Smena yopish -->
-    <div id="shift-close-modal" class="modal">
-        <div class="modal-content modal-sm">
-            <div class="modal-header">
-                <h3><i class="fa-solid fa-lock"></i> Smenani yopish</h3>
-                <span class="close-modal">&times;</span>
-            </div>
-            <div class="modal-body form-group">
-                <div id="shift-close-summary" class="storage-info"></div>
-                <p id="shift-close-blind" class="hint-text" style="display:none;">Kassadagi naqd pulni sanab, summani kiriting. Hisobot egasi uchun chop etiladi.</p>
-                <label>Kassadagi naqd pul — sanab chiqilgan summa (so'm) *:</label>
-                <input type="number" id="shift-close-counted" placeholder="0" min="0">
-                <div id="shift-diff-box" class="shift-diff"></div>
-                <label>Izoh (ixtiyoriy):</label>
-                <input type="text" id="shift-close-note" placeholder="Masalan: 5 000 so'm kam, qaytim berilgan" autocomplete="off">
-                <label class="check-row"><input type="checkbox" id="shift-close-print" checked> Hisobotni chop etish</label>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary close-modal-btn">Bekor qilish</button>
-                <button class="btn btn-danger" id="shift-close-confirm"><i class="fa-solid fa-lock"></i> Smenani yopish</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal 16: Smena hisoboti -->
-    <div id="shift-report-modal" class="modal">
-        <div class="modal-content modal-sm text-center">
-            <div class="modal-header">
-                <h3><i class="fa-solid fa-file-lines"></i> Smena hisoboti</h3>
-                <span class="close-modal">&times;</span>
-            </div>
-            <div class="modal-body receipt-stage">
-                <div id="shift-report-paper"></div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary close-modal-btn">Yopish</button>
-                <button class="btn btn-primary" id="shift-report-print-btn"><i class="fa-solid fa-print"></i> Chop etish</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal 13: Omborga kirim -->
-    <div id="stock-income-modal" class="modal">
-        <div class="modal-content modal-sm">
-            <div class="modal-header">
-                <h3><i class="fa-solid fa-arrow-down"></i> Omborga kirim</h3>
-                <span class="close-modal">&times;</span>
-            </div>
-            <div class="modal-body form-group">
-                <p><strong id="si-product-name"></strong></p>
-                <input type="hidden" id="si-product-id">
-                <label>Qabul qilingan miqdor (dona) *:</label>
-                <input type="number" id="si-qty" placeholder="0" min="1">
-                <label>Yangi tan narxi (so'm) — bo'sh qolsa o'zgarmaydi:</label>
-                <input type="number" id="si-buy-price" placeholder="0" min="0">
-                <label>Izoh (yetkazuvchi, hujjat raqami):</label>
-                <input type="text" id="si-note" placeholder="Masalan: Salom Treyding, nakt.№123" autocomplete="off">
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary close-modal-btn">Bekor qilish</button>
-                <button class="btn btn-success" id="si-save-btn"><i class="fa-solid fa-check"></i> Qabul qilish</button>
             </div>
         </div>
     </div>
